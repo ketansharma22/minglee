@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { ThemeProvider } from '@/components/ui/ThemeProvider';
-import '@/styles/globals.css';
+import { ThemeProvider } from '../components/ui/ThemeProvider';
+import '../styles/globals.css';
 
 export const metadata: Metadata = {
   title: 'Mingle — Meet Strangers Anonymously',

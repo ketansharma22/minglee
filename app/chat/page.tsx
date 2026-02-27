@@ -3,10 +3,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useChat } from '@/hooks/useChat';
-import { useChatStore } from '@/lib/store/chatStore';
-import { VideoPanel } from '@/components/video/VideoPanel';
-import { ChatPanel } from '@/components/chat/ChatPanel';
+import { useChat } from '../../hooks/useChat';
+import { useChatStore } from '../../lib/store/chatStore';
+import { VideoPanel } from '../../components/video/VideoPanel';
+import { ChatPanel } from '../../components/chat/ChatPanel';
 
 type Layout = 'split' | 'chat-focus' | 'video-focus';
 
@@ -226,7 +226,7 @@ function DesktopLayout({
   onTyping: () => void;
   onNext: () => void;
   onDisconnect: () => void;
-  connectionStatus: import('@/types').ConnectionStatus;
+  connectionStatus: import('../../types').ConnectionStatus;
 }) {
   if (layout === 'video-focus') {
     return (
@@ -303,7 +303,7 @@ function MobileLayout({
   onTyping: () => void;
   onNext: () => void;
   onDisconnect: () => void;
-  connectionStatus: import('@/types').ConnectionStatus;
+  connectionStatus: import('../../types').ConnectionStatus;
 }) {
   return (
     <div className="h-full flex flex-col">

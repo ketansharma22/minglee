@@ -2,8 +2,8 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { useChatStore } from '@/lib/store/chatStore';
-import type { Message } from '@/types';
+import { useChatStore } from '../../lib/store/chatStore';
+import type { Message } from '../../types';
 
 interface ChatPanelProps {
   onSendMessage: (content: string) => void;

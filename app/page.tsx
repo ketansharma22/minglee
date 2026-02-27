@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useChatStore } from '@/lib/store/chatStore';
+import { useChatStore } from '../lib/store/chatStore';
 
 const INTERESTS = [
   'music', 'gaming', 'art', 'coding', 'travel',

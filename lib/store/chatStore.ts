@@ -1,6 +1,6 @@
 // lib/store/chatStore.ts
 import { create } from 'zustand';
-import type { Message, UserStatus, ConnectionStatus, Theme } from '@/types';
+import type { Message, UserStatus, ConnectionStatus, Theme } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
 
 interface ChatState {

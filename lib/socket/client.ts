@@ -1,6 +1,6 @@
 // lib/socket/client.ts
 import { io, Socket } from 'socket.io-client';
-import type { ClientToServerEvents, ServerToClientEvents } from '@/types';
+import type { ClientToServerEvents, ServerToClientEvents } from '../../types';
 
 type AppSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 

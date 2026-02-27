@@ -2,7 +2,7 @@
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
-import type { ConnectionStatus } from '@/types';
+import type { ConnectionStatus } from '../../types';
 
 interface VideoPanelProps {
   localStream: MediaStream | null;

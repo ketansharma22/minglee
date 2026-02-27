@@ -156,11 +156,14 @@ export class MatchmakingService {
 
     if (history1.size >= 10) {
       const first = history1.values().next().value;
-      history1.delete(first);
+      if (first !== undefined) {
+        history1.delete(first);
+      }
     }
-    if (history2.size >= 10) {
       const first = history2.values().next().value;
-      history2.delete(first);
+      if (first !== undefined) {
+        history2.delete(first);
+      }
     }
 
     history1.add(userId2);

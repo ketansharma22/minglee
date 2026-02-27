@@ -2,8 +2,8 @@
 'use client';
 
 import { useRef, useState, useCallback, useEffect } from 'react';
-import type { AppSocket } from '@/lib/socket/client';
-import type { ConnectionStatus } from '@/types';
+import type { AppSocket } from '../lib/socket/client';
+import type { ConnectionStatus } from '../types';
 
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [

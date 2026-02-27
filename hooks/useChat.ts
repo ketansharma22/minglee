@@ -2,10 +2,10 @@
 'use client';
 
 import { useEffect, useRef, useCallback } from 'react';
-import { socketService } from '@/lib/socket/client';
-import { useChatStore } from '@/lib/store/chatStore';
+import { socketService } from '../lib/socket/client';
+import { useChatStore } from '../lib/store/chatStore';
 import { useWebRTC } from './useWebRTC';
-import type { AppSocket } from '@/lib/socket/client';
+import type { AppSocket } from '../lib/socket/client';
 
 export function useChat() {
   // Store socket in a ref AND expose it — ref means it's always current in closures
