@@ -4,6 +4,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { socketService } from '../lib/socket/client';
 import { useChatStore } from '../lib/store/chatStore';
+import { useAuthStore } from '../lib/store/authStore';
 import { useWebRTC } from './useWebRTC';
 import type { AppSocket } from '../lib/socket/client';
 
@@ -12,6 +13,8 @@ export function useChat() {
   const [socket, setSocket] = useState<AppSocket | null>(null);
   const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isTypingRef = useRef(false);
+
+  const { user } = useAuthStore();
 
   const {
     userStatus,
@@ -38,7 +41,7 @@ export function useChat() {
 
   // Initialize socket connection
   useEffect(() => {
-    const sock = socketService.connect();
+    const sock = socketService.connect(user?.uid);
     socketRef.current = sock;
     setSocket(sock);
 

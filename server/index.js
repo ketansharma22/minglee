@@ -35,7 +35,7 @@ const socketToUser = new Map(); // socketId → userId
 // ─── Rate limiters ────────────────────────────────────────────────────────────
 const connectionLimiter = new RateLimiterMemory({
   points: parseInt(process.env.RATE_LIMIT_MAX_CONNECTIONS || '10'),
-  duration: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000') / 1000,
+  duration: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60'),
 });
 
 const messageLimiter = new RateLimiterMemory({
@@ -152,7 +152,8 @@ io.on('connection', async (socket) => {
     return;
   }
 
-  const userId = uuidv4();
+  // Use Firebase UID if provided, otherwise generate anonymous ID
+  const userId = socket.handshake.auth?.userId || uuidv4();
   socketToUser.set(socket.id, userId);
   broadcastStats();
 

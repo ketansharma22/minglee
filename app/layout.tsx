@@ -1,6 +1,7 @@
 // app/layout.tsx
 import type { Metadata } from 'next';
 import { ThemeProvider } from '../components/ui/ThemeProvider';
+import { AuthProvider } from '../components/auth/AuthProvider';
 import '../styles/globals.css';
 
 export const metadata: Metadata = {
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
   keywords: ['anonymous chat', 'video chat', 'random chat', 'talk to strangers'],
   themeColor: [
     { media: '(prefers-color-scheme: dark)', color: '#0a0a0f' },
-    { media: '(prefers-color-scheme: light)', color: '#f8f8fc' },
+    { media: '(prefers-color-scheme: light)', color: '#f0f0f8' },
   ],
 };
 
@@ -26,7 +27,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="antialiased">
         <ThemeProvider>
-          {children}
+          <AuthProvider>
+            {children}
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>
