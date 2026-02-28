@@ -23,12 +23,12 @@ const ICE_SERVERS: RTCConfiguration = {
 
 interface UseWebRTCOptions {
   socket: AppSocket | null;
+  roomId: string | null;
+  isInitiator: boolean;
   onConnectionStatusChange?: (status: ConnectionStatus) => void;
 }
 
-export function useWebRTC({ socket, onConnectionStatusChange }: UseWebRTCOptions) {
-  const socketRef = useRef<AppSocket | null>(null);
-  const roomIdRef = useRef<string | null>(null);
+export function useWebRTC({ socket, roomId, isInitiator, onConnectionStatusChange }: UseWebRTCOptions) {
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
@@ -40,10 +40,7 @@ export function useWebRTC({ socket, onConnectionStatusChange }: UseWebRTCOptions
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [mediaError, setMediaError] = useState<string | null>(null);
-
-  useEffect(() => {
-    socketRef.current = socket;
-  }, [socket]);
+  const [hasMedia, setHasMedia] = useState(false);
 
   const updateStatus = useCallback((status: ConnectionStatus) => {
     setConnectionStatus(status);
@@ -51,7 +48,6 @@ export function useWebRTC({ socket, onConnectionStatusChange }: UseWebRTCOptions
   }, [onConnectionStatusChange]);
 
   const getLocalMedia = useCallback(async (): Promise<MediaStream | null> => {
-    if (localStreamRef.current) return localStreamRef.current;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
@@ -59,6 +55,7 @@ export function useWebRTC({ socket, onConnectionStatusChange }: UseWebRTCOptions
       });
       localStreamRef.current = stream;
       setLocalStream(stream);
+      setHasMedia(true);
       setMediaError(null);
       return stream;
     } catch (err: unknown) {
@@ -70,66 +67,77 @@ export function useWebRTC({ socket, onConnectionStatusChange }: UseWebRTCOptions
       } else {
         setMediaError('Could not access media devices. You can still text chat.');
       }
+      setHasMedia(false);
       return null;
     }
   }, []);
 
-  const createPeerConnection = useCallback((stream: MediaStream | null): RTCPeerConnection => {
+  const createPeerConnection = useCallback((): RTCPeerConnection => {
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
     }
 
     const pc = new RTCPeerConnection(ICE_SERVERS);
     peerConnectionRef.current = pc;
 
-    if (stream) {
-      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+    // Add local tracks
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => {
+        pc.addTrack(track, localStreamRef.current!);
+      });
     }
 
+    // Handle remote stream
+    const remoteMediaStream = new MediaStream();
+    setRemoteStream(remoteMediaStream);
+
     pc.ontrack = (event) => {
-      const incomingStream = event.streams[0];
-      if (incomingStream) {
-        setRemoteStream(incomingStream);
-      }
+      event.streams[0]?.getTracks().forEach(track => {
+        remoteMediaStream.addTrack(track);
+      });
+      setRemoteStream(new MediaStream(remoteMediaStream.getTracks()));
     };
 
-    // Use refs so these callbacks always have current values
+    // ICE candidate handling
     pc.onicecandidate = (event) => {
-      if (event.candidate && socketRef.current && roomIdRef.current) {
-        socketRef.current.emit('signal:send', {
-          roomId: roomIdRef.current,
+      if (event.candidate && socket && roomId) {
+        socket.emit('signal:send', {
+          roomId,
           type: 'ice-candidate',
           data: event.candidate.toJSON(),
         });
       }
     };
 
+    // Connection state changes
     pc.onconnectionstatechange = () => {
       switch (pc.connectionState) {
-        case 'connecting':   updateStatus('connecting'); break;
-        case 'connected':    updateStatus('connected'); break;
-        case 'failed':       updateStatus('failed'); pc.restartIce(); break;
+        case 'connecting': updateStatus('connecting'); break;
+        case 'connected': updateStatus('connected'); break;
+        case 'failed':
+          updateStatus('failed');
+          // Auto restart ICE
+          pc.restartIce();
+          break;
         case 'disconnected': updateStatus('reconnecting'); break;
-        case 'closed':       updateStatus('idle'); break;
+        case 'closed': updateStatus('idle'); break;
       }
     };
 
     pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === 'failed') pc.restartIce();
+      if (pc.iceConnectionState === 'failed') {
+        pc.restartIce();
+      }
     };
 
     return pc;
-  }, [updateStatus]);
+  }, [socket, roomId, updateStatus]);
 
-  const startCall = useCallback(async (
-    roomId: string,
-    isInitiator: boolean,
-    stream: MediaStream | null,
-  ) => {
-    roomIdRef.current = roomId;
+  const startCall = useCallback(async () => {
+    if (!socket || !roomId) return;
+
     updateStatus('connecting');
-    const pc = createPeerConnection(stream);
+    const pc = createPeerConnection();
 
     if (isInitiator) {
       try {
@@ -139,28 +147,21 @@ export function useWebRTC({ socket, onConnectionStatusChange }: UseWebRTCOptions
         });
         await pc.setLocalDescription(offer);
 
-        if (socketRef.current) {
-          socketRef.current.emit('signal:send', { roomId, type: 'offer', data: offer });
-        }
+        socket.emit('signal:send', {
+          roomId,
+          type: 'offer',
+          data: offer,
+        });
       } catch (err) {
         console.error('Failed to create offer:', err);
         updateStatus('failed');
       }
     }
-  }, [createPeerConnection, updateStatus]);
+  }, [socket, roomId, isInitiator, createPeerConnection, updateStatus]);
 
-  const handleSignal = useCallback(async (
-    type: string,
-    data: RTCSessionDescriptionInit | RTCIceCandidateInit,
-  ) => {
+  const handleSignal = useCallback(async (type: string, data: RTCSessionDescriptionInit | RTCIceCandidateInit) => {
     const pc = peerConnectionRef.current;
-    const sock = socketRef.current;
-    const roomId = roomIdRef.current;
-
-    if (!pc || !sock || !roomId) {
-      console.warn('[WebRTC] handleSignal: missing pc/socket/roomId', { pc: !!pc, sock: !!sock, roomId });
-      return;
-    }
+    if (!pc || !socket || !roomId) return;
 
     try {
       if (type === 'offer') {
@@ -168,23 +169,28 @@ export function useWebRTC({ socket, onConnectionStatusChange }: UseWebRTCOptions
         await pc.setRemoteDescription(new RTCSessionDescription(data as RTCSessionDescriptionInit));
         isSettingRemoteDescriptionRef.current = false;
 
-        for (const c of pendingCandidatesRef.current) {
-          await pc.addIceCandidate(new RTCIceCandidate(c));
+        // Flush pending ICE candidates
+        for (const candidate of pendingCandidatesRef.current) {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
         }
         pendingCandidatesRef.current = [];
 
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        sock.emit('signal:send', { roomId, type: 'answer', data: answer });
 
+        socket.emit('signal:send', {
+          roomId,
+          type: 'answer',
+          data: answer,
+        });
       } else if (type === 'answer') {
         await pc.setRemoteDescription(new RTCSessionDescription(data as RTCSessionDescriptionInit));
 
-        for (const c of pendingCandidatesRef.current) {
-          await pc.addIceCandidate(new RTCIceCandidate(c));
+        // Flush pending candidates
+        for (const candidate of pendingCandidatesRef.current) {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
         }
         pendingCandidatesRef.current = [];
-
       } else if (type === 'ice-candidate') {
         const candidate = data as RTCIceCandidateInit;
         if (pc.remoteDescription && !isSettingRemoteDescriptionRef.current) {
@@ -194,20 +200,24 @@ export function useWebRTC({ socket, onConnectionStatusChange }: UseWebRTCOptions
         }
       }
     } catch (err) {
-      console.error(`[WebRTC] signal error (${type}):`, err);
+      console.error(`WebRTC signal error (${type}):`, err);
     }
-  }, []);
+  }, [socket, roomId]);
 
   const toggleVideo = useCallback(() => {
     if (localStreamRef.current) {
-      localStreamRef.current.getVideoTracks().forEach(t => { t.enabled = !t.enabled; });
+      localStreamRef.current.getVideoTracks().forEach(track => {
+        track.enabled = !track.enabled;
+      });
       setVideoEnabled(prev => !prev);
     }
   }, []);
 
   const toggleAudio = useCallback(() => {
     if (localStreamRef.current) {
-      localStreamRef.current.getAudioTracks().forEach(t => { t.enabled = !t.enabled; });
+      localStreamRef.current.getAudioTracks().forEach(track => {
+        track.enabled = !track.enabled;
+      });
       setAudioEnabled(prev => !prev);
     }
   }, []);
@@ -218,23 +228,25 @@ export function useWebRTC({ socket, onConnectionStatusChange }: UseWebRTCOptions
       peerConnectionRef.current = null;
     }
     if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(t => t.stop());
+      localStreamRef.current.getTracks().forEach(track => track.stop());
       localStreamRef.current = null;
     }
-    roomIdRef.current = null;
-    pendingCandidatesRef.current = [];
     setLocalStream(null);
     setRemoteStream(null);
     updateStatus('idle');
+    pendingCandidatesRef.current = [];
   }, [updateStatus]);
 
+  // Handle incoming signals from socket
   useEffect(() => {
     if (!socket) return;
-    const onSignal = ({ type, data }: { type: string; data: RTCSessionDescriptionInit | RTCIceCandidateInit }) => {
+
+    const handleSignalReceive = ({ type, data }: { type: string; data: RTCSessionDescriptionInit | RTCIceCandidateInit }) => {
       handleSignal(type, data);
     };
-    socket.on('signal:receive', onSignal);
-    return () => { socket.off('signal:receive', onSignal); };
+
+    socket.on('signal:receive', handleSignalReceive);
+    return () => { socket.off('signal:receive', handleSignalReceive); };
   }, [socket, handleSignal]);
 
   return {
@@ -244,6 +256,7 @@ export function useWebRTC({ socket, onConnectionStatusChange }: UseWebRTCOptions
     videoEnabled,
     audioEnabled,
     mediaError,
+    hasMedia,
     getLocalMedia,
     startCall,
     toggleVideo,

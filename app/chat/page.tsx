@@ -10,6 +10,8 @@ import { ChatPanel } from '../../components/chat/ChatPanel';
 
 type Layout = 'split' | 'chat-focus' | 'video-focus';
 
+const HEADER_HEIGHT = 52;
+
 export default function ChatPage() {
   const router = useRouter();
   const { userStatus, connectionStatus, onlineCount, chattingCount, waitingCount, setTheme, theme } = useChatStore();
@@ -38,7 +40,7 @@ export default function ChatPage() {
 
   const statusConfig = {
     idle: { label: 'Idle', color: 'var(--color-text-muted)' },
-    waiting: { label: 'Finding stranger...', color: 'var(--color-warning)' },
+    waiting: { label: 'Searching...', color: 'var(--color-warning)' },
     connected: { label: 'Connected', color: 'var(--color-success)' },
     disconnected: { label: 'Disconnected', color: 'var(--color-danger)' },
   };
@@ -47,94 +49,140 @@ export default function ChatPage() {
 
   return (
     <div
-      className="min-h-dvh flex flex-col"
-      style={{ background: 'var(--color-bg)' }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100dvh',
+        overflow: 'hidden',
+        background: 'var(--color-bg)',
+      }}
     >
-      {/* Header */}
+      {/* ── Header ────────────────────────────────────────────────── */}
       <header
-        className="flex items-center justify-between px-4 py-3 z-10 flex-shrink-0"
         style={{
+          height: HEADER_HEIGHT,
+          minHeight: HEADER_HEIGHT,
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 12px',
           background: 'var(--color-surface)',
           borderBottom: '1px solid var(--color-border)',
-          height: 56,
+          position: 'relative',
+          zIndex: 20,
+          gap: 8,
         }}
       >
-        {/* Left: Logo + status */}
-        <div className="flex items-center gap-3">
+        {/* Left: Logo + status pill */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <button
             onClick={handleGoHome}
-            className="font-bold flex items-center gap-2 transition-opacity hover:opacity-70"
+            aria-label="Go home"
             style={{
               fontFamily: 'var(--font-display)',
-              fontSize: '1.1rem',
+              fontWeight: 700,
+              fontSize: '1rem',
               color: 'var(--color-text)',
               background: 'none',
               border: 'none',
               cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '4px 6px',
+              borderRadius: 8,
+              whiteSpace: 'nowrap',
+              transition: 'opacity 0.15s',
             }}
+            onMouseOver={e => (e.currentTarget.style.opacity = '0.7')}
+            onMouseOut={e => (e.currentTarget.style.opacity = '1')}
           >
             ← Novu
           </button>
 
+          {/* Status pill — hidden on very small screens */}
           <div
-            className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full text-xs"
             style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '3px 10px',
+              borderRadius: 999,
               background: 'var(--color-surface-2)',
               border: '1px solid var(--color-border)',
               color: currentStatus.color,
+              fontSize: '0.7rem',
+              whiteSpace: 'nowrap',
             }}
+            className="hidden sm:flex"
           >
             <div
-              className="w-1.5 h-1.5 rounded-full"
               style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
                 background: currentStatus.color,
-                boxShadow: userStatus === 'connected'
-                  ? `0 0 6px ${currentStatus.color}`
-                  : userStatus === 'waiting'
-                  ? 'none'
-                  : 'none',
+                boxShadow: userStatus === 'connected' ? `0 0 6px ${currentStatus.color}` : 'none',
+                flexShrink: 0,
               }}
             />
             {userStatus === 'waiting' ? (
-              <span className="flex items-center gap-1">
+              <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                 <span className="typing-dot" style={{ background: 'var(--color-warning)' }} />
                 <span className="typing-dot" style={{ background: 'var(--color-warning)' }} />
                 <span className="typing-dot" style={{ background: 'var(--color-warning)' }} />
-                Searching
+                <span style={{ marginLeft: 2 }}>Searching</span>
               </span>
             ) : currentStatus.label}
           </div>
         </div>
 
-        {/* Center: Stats (desktop) */}
+        {/* Center: Stats — desktop only */}
         <div
-          className="hidden md:flex items-center gap-4 text-xs"
-          style={{ color: 'var(--color-text-muted)' }}
+          className="hidden md:flex"
+          style={{
+            alignItems: 'center',
+            gap: 16,
+            fontSize: '0.75rem',
+            color: 'var(--color-text-muted)',
+            position: 'absolute',
+            left: '50%',
+            transform: 'translateX(-50%)',
+          }}
         >
           <span><strong style={{ color: 'var(--color-text)' }}>{onlineCount}</strong> online</span>
           <span><strong style={{ color: 'var(--color-text)' }}>{chattingCount}</strong> chatting</span>
         </div>
 
-        {/* Right: Layout + theme controls */}
-        <div className="flex items-center gap-2">
-          {/* Layout switcher (desktop only) */}
+        {/* Right: controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {/* Layout switcher — desktop only */}
           {!isMobile && (
             <div
-              className="flex gap-1 p-1 rounded-lg"
-              style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}
+              style={{
+                display: 'flex',
+                gap: 2,
+                padding: 3,
+                borderRadius: 8,
+                background: 'var(--color-surface-2)',
+                border: '1px solid var(--color-border)',
+              }}
             >
               {(['split', 'video-focus', 'chat-focus'] as Layout[]).map(l => (
                 <button
                   key={l}
                   onClick={() => setLayout(l)}
-                  title={l.replace('-', ' ')}
-                  className="px-2 py-1 rounded text-xs transition-all duration-200"
+                  title={l.replace(/-/g, ' ')}
                   style={{
+                    padding: '3px 8px',
+                    borderRadius: 6,
                     background: layout === l ? 'var(--color-surface-3)' : 'transparent',
                     color: layout === l ? 'var(--color-text)' : 'var(--color-text-muted)',
                     border: 'none',
                     cursor: 'pointer',
-                    fontSize: '0.7rem',
+                    fontSize: '0.75rem',
+                    transition: 'all 0.15s',
                   }}
                 >
                   {l === 'split' ? '⊡' : l === 'video-focus' ? '□' : '☰'}
@@ -143,43 +191,56 @@ export default function ChatPage() {
             </div>
           )}
 
+          {/* Theme toggle */}
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="btn-ghost text-xs px-3 py-1.5"
             aria-label="Toggle theme"
+            style={{
+              padding: '5px 10px',
+              borderRadius: 8,
+              background: 'transparent',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-text-muted)',
+              cursor: 'pointer',
+              fontSize: '0.8rem',
+              lineHeight: 1,
+            }}
           >
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
 
-          {userStatus === 'connected' && (
+          {/* Next / Stop — desktop only (mobile has them in chat panel) */}
+          {userStatus === 'connected' && !isMobile && (
             <>
-              <button
-                onClick={nextChat}
-                className="btn-ghost text-xs px-3 py-1.5 hidden sm:flex"
-              >
+              <button onClick={nextChat} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '5px 12px' }}>
                 ⏭ Next
               </button>
-              <button
-                onClick={disconnect}
-                className="btn-danger text-xs px-3 py-1.5 hidden sm:flex"
-              >
+              <button onClick={disconnect} className="btn-danger" style={{ fontSize: '0.75rem', padding: '5px 12px' }}>
                 ✕ Stop
               </button>
             </>
           )}
 
+          {/* Find — when idle */}
           {(userStatus === 'idle' || userStatus === 'disconnected') && (
-            <button onClick={startChat} className="btn-primary text-xs px-4 py-2">
-              🔍 Find Stranger
+            <button onClick={startChat} className="btn-primary" style={{ fontSize: '0.75rem', padding: '6px 14px' }}>
+              🔍 {isMobile ? 'Find' : 'Find Stranger'}
             </button>
           )}
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-hidden" style={{ minHeight: 0 }}>
+      {/* ── Main content — fills remaining height exactly ─────────── */}
+      <main
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
         {isMobile ? (
-          // Mobile: Stacked layout
           <MobileLayout
             webrtc={webrtc}
             onSendMessage={sendMessage}
@@ -189,7 +250,6 @@ export default function ChatPage() {
             connectionStatus={connectionStatus}
           />
         ) : (
-          // Desktop: Configurable split
           <DesktopLayout
             layout={layout}
             webrtc={webrtc}
@@ -226,11 +286,13 @@ function DesktopLayout({
   onTyping: () => void;
   onNext: () => void;
   onDisconnect: () => void;
-  connectionStatus: import('../../types').ConnectionStatus;
+  connectionStatus: import('@/types').ConnectionStatus;
 }) {
+  const panelStyle: React.CSSProperties = { width: '100%', height: '100%', overflow: 'hidden' };
+
   if (layout === 'video-focus') {
     return (
-      <div className="h-full">
+      <div style={panelStyle}>
         <VideoPanel
           localStream={webrtc.localStream}
           remoteStream={webrtc.remoteStream}
@@ -247,7 +309,7 @@ function DesktopLayout({
 
   if (layout === 'chat-focus') {
     return (
-      <div className="h-full">
+      <div style={panelStyle}>
         <ChatPanel
           onSendMessage={onSendMessage}
           onTyping={onTyping}
@@ -260,11 +322,9 @@ function DesktopLayout({
 
   // Split layout (default)
   return (
-    <div className="h-full flex">
-      {/* Video - 60% */}
-      <div
-        style={{ flex: '0 0 60%', borderRight: '1px solid var(--color-border)' }}
-      >
+    <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}>
+      {/* Video — 60% */}
+      <div style={{ flex: '0 0 60%', minWidth: 0, borderRight: '1px solid var(--color-border)', overflow: 'hidden' }}>
         <VideoPanel
           localStream={webrtc.localStream}
           remoteStream={webrtc.remoteStream}
@@ -276,8 +336,8 @@ function DesktopLayout({
           onToggleAudio={webrtc.toggleAudio}
         />
       </div>
-      {/* Chat - 40% */}
-      <div style={{ flex: '1 1 40%' }}>
+      {/* Chat — 40% */}
+      <div style={{ flex: '1 1 40%', minWidth: 0, overflow: 'hidden' }}>
         <ChatPanel
           onSendMessage={onSendMessage}
           onTyping={onTyping}
@@ -303,12 +363,19 @@ function MobileLayout({
   onTyping: () => void;
   onNext: () => void;
   onDisconnect: () => void;
-  connectionStatus: import('../../types').ConnectionStatus;
+  connectionStatus: import('@/types').ConnectionStatus;
 }) {
   return (
-    <div className="h-full flex flex-col">
-      {/* Video — top third */}
-      <div style={{ flex: '0 0 40%', borderBottom: '1px solid var(--color-border)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {/* Video — fixed pixel height so chat always has room */}
+      <div
+        style={{
+          flexShrink: 0,
+          height: 260,
+          borderBottom: '1px solid var(--color-border)',
+          overflow: 'hidden',
+        }}
+      >
         <VideoPanel
           localStream={webrtc.localStream}
           remoteStream={webrtc.remoteStream}
@@ -320,8 +387,8 @@ function MobileLayout({
           onToggleAudio={webrtc.toggleAudio}
         />
       </div>
-      {/* Chat — remaining space */}
-      <div style={{ flex: 1, minHeight: 0, paddingBottom: '0px' }}>
+      {/* Chat — fills all remaining space, scrolls internally */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <ChatPanel
           onSendMessage={onSendMessage}
           onTyping={onTyping}

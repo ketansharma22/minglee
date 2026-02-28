@@ -1,3 +1,4 @@
+// components/ui/ThemeProvider.tsx
 'use client';
 
 import { useEffect } from 'react';
@@ -7,7 +8,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { theme, setTheme } = useChatStore();
 
   useEffect(() => {
-    const stored = localStorage.getItem('mingle-theme') as 'dark' | 'light' | null;
+    // Load theme from localStorage
+    const stored = localStorage.getItem('novu-theme') as 'dark' | 'light' | null;
     if (stored) setTheme(stored);
   }, [setTheme]);
 
@@ -15,7 +17,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const root = document.documentElement;
     root.classList.remove('dark', 'light');
     root.classList.add(theme);
-    localStorage.setItem('mingle-theme', theme);
+    localStorage.setItem('novu-theme', theme);
   }, [theme]);
 
   return <>{children}</>;

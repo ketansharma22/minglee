@@ -1,21 +1,22 @@
 // hooks/useChat.ts
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { socketService } from '../lib/socket/client';
 import { useChatStore } from '../lib/store/chatStore';
 import { useWebRTC } from './useWebRTC';
 import type { AppSocket } from '../lib/socket/client';
 
 export function useChat() {
-  // Store socket in a ref AND expose it — ref means it's always current in closures
   const socketRef = useRef<AppSocket | null>(null);
+  const [socket, setSocket] = useState<AppSocket | null>(null);
   const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isTypingRef = useRef(false);
 
   const {
     userStatus,
     roomId,
+    isInitiator,
     interests,
     setUserStatus,
     setConnectionStatus,
@@ -29,75 +30,33 @@ export function useChat() {
   } = useChatStore();
 
   const webrtc = useWebRTC({
-    socket: socketRef.current,
+    socket,
+    roomId,
+    isInitiator,
     onConnectionStatusChange: setConnectionStatus,
   });
 
-  // Keep a stable ref to webrtc functions so useEffect closures never go stale
-  const webrtcRef = useRef(webrtc);
-  useEffect(() => {
-    webrtcRef.current = webrtc;
-  });
-
-  // Initialize socket once
+  // Initialize socket connection
   useEffect(() => {
     const sock = socketService.connect();
     socketRef.current = sock;
+    setSocket(sock);
 
-    sock.on('connect', () => console.log('[Socket] connected:', sock.id));
+    sock.on('connect', () => {
+      console.log('Socket connected:', sock.id);
+    });
+
     sock.on('connect_error', (err) => {
-      console.error('[Socket] connection error:', err);
-      useChatStore.getState().setUserStatus('idle');
+      console.error('Socket connection error:', err);
+      setUserStatus('idle');
     });
+
     sock.on('stats:update', (stats) => {
-      useChatStore.getState().setStats({ online: stats.online, waiting: stats.waiting, chatting: stats.chatting });
+      setStats({ online: stats.online, waiting: stats.waiting, chatting: stats.chatting });
     });
+
     sock.on('error', (payload) => {
-      useChatStore.getState().addSystemMessage(`Error: ${payload.message}`);
-    });
-
-    // ── match:found ────────────────────────────────────────────────────────
-    // Defined here so socketRef.current is always fresh when it fires
-    sock.on('match:found', async ({ roomId, isInitiator }: { roomId: string; peerId: string; isInitiator: boolean }) => {
-      const store = useChatStore.getState();
-      store.setRoom(roomId, isInitiator);
-      store.setUserStatus('connected');
-      store.clearMessages();
-      store.addSystemMessage('You are now chatting with a stranger. Say hi!');
-
-      // Get media, then start call — pass roomId and isInitiator directly (never stale)
-      const stream = await webrtcRef.current.getLocalMedia();
-      await webrtcRef.current.startCall(roomId, isInitiator, stream);
-    });
-
-    // ── queue:waiting ──────────────────────────────────────────────────────
-    sock.on('queue:waiting', () => {
-      useChatStore.getState().setUserStatus('waiting');
-    });
-
-    // ── message:receive ────────────────────────────────────────────────────
-    sock.on('message:receive', ({ content, timestamp }) => {
-      useChatStore.getState().addMessage({
-        type: 'text',
-        content,
-        sender: 'stranger',
-        timestamp,
-        status: 'delivered',
-      });
-    });
-
-    // ── typing:update ──────────────────────────────────────────────────────
-    sock.on('typing:update', ({ isTyping }) => {
-      useChatStore.getState().setTyping(isTyping);
-    });
-
-    // ── chat:stranger_disconnected ─────────────────────────────────────────
-    sock.on('chat:stranger_disconnected', () => {
-      useChatStore.getState().addSystemMessage('Stranger has disconnected.');
-      webrtcRef.current.cleanup();
-      useChatStore.getState().setRoom(null);
-      useChatStore.getState().setUserStatus('idle');
-      useChatStore.getState().setTyping(false);
+      addSystemMessage(`Error: ${payload.message}`);
     });
 
     return () => {
@@ -105,35 +64,104 @@ export function useChat() {
       sock.off('connect_error');
       sock.off('stats:update');
       sock.off('error');
-      sock.off('match:found');
-      sock.off('queue:waiting');
-      sock.off('message:receive');
-      sock.off('typing:update');
-      sock.off('chat:stranger_disconnected');
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally empty — socket is initialized once, all handlers use refs/store directly
+  }, [setUserStatus, setStats, addSystemMessage]);
 
-  // ── Actions ──────────────────────────────────────────────────────────────
+  // Match found handler
+  useEffect(() => {
+    if (!socket) return;
 
+    const handleMatchFound = async ({ roomId, isInitiator }: { roomId: string; peerId: string; isInitiator: boolean }) => {
+      setRoom(roomId, isInitiator);
+      setUserStatus('connected');
+      clearMessages();
+      addSystemMessage('You are now chatting with a stranger. Say hi!');
+
+      // Start WebRTC call
+      await webrtc.getLocalMedia();
+      await webrtc.startCall();
+    };
+
+    socket.on('match:found', handleMatchFound);
+    return () => { socket.off('match:found', handleMatchFound); };
+  }, [socket, setRoom, setUserStatus, clearMessages, addSystemMessage, webrtc]);
+
+  // Queue waiting
+  useEffect(() => {
+    if (!socket) return;
+
+    socket.on('queue:waiting', ({ position }) => {
+      setUserStatus('waiting');
+    });
+
+    return () => { socket.off('queue:waiting'); };
+  }, [socket, setUserStatus]);
+
+  // Incoming messages
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleMessage = ({ content, timestamp }: { roomId: string; content: string; messageId: string; timestamp: number }) => {
+      addMessage({
+        type: 'text',
+        content,
+        sender: 'stranger',
+        timestamp,
+        status: 'delivered',
+      });
+    };
+
+    socket.on('message:receive', handleMessage);
+    return () => { socket.off('message:receive', handleMessage); };
+  }, [socket, addMessage]);
+
+  // Typing indicator
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleTyping = ({ isTyping }: { roomId: string; isTyping: boolean }) => {
+      setTyping(isTyping);
+    };
+
+    socket.on('typing:update', handleTyping);
+    return () => { socket.off('typing:update', handleTyping); };
+  }, [socket, setTyping]);
+
+  // Stranger disconnect
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleStrangerDisconnect = () => {
+      addSystemMessage('Stranger has disconnected.');
+      webrtc.cleanup();
+      setRoom(null);
+      setUserStatus('idle');
+      setTyping(false);
+    };
+
+    socket.on('chat:stranger_disconnected', handleStrangerDisconnect);
+    return () => { socket.off('chat:stranger_disconnected', handleStrangerDisconnect); };
+  }, [socket, addSystemMessage, webrtc, setRoom, setUserStatus, setTyping]);
+
+  // ─── Actions ────────────────────────────────────────────────────────────────
   const startChat = useCallback(() => {
-    const sock = socketRef.current;
-    if (!sock) return;
-    useChatStore.getState().setUserStatus('waiting');
-    sock.emit('queue:join', { interests: useChatStore.getState().interests });
-  }, []);
+    if (!socket) return;
+    setUserStatus('waiting');
+    socket.emit('queue:join', { interests });
+  }, [socket, interests, setUserStatus]);
 
   const sendMessage = useCallback((content: string) => {
-    const sock = socketRef.current;
-    const currentRoomId = useChatStore.getState().roomId;
-    if (!sock || !currentRoomId || !content.trim()) return;
+    if (!socket || !roomId || !content.trim()) return;
 
+    // Stop typing
     if (isTypingRef.current) {
-      sock.emit('typing:stop', { roomId: currentRoomId });
+      socket.emit('typing:stop', { roomId });
       isTypingRef.current = false;
     }
 
     const timestamp = Date.now();
+
+    // Optimistic add
     useChatStore.getState().addMessage({
       type: 'text',
       content: content.trim(),
@@ -142,62 +170,61 @@ export function useChat() {
       status: 'sent',
     });
 
-    sock.emit('message:send', {
-      roomId: currentRoomId,
+    socket.emit('message:send', {
+      roomId,
       content: content.trim(),
       messageId: Math.random().toString(36).slice(2),
       timestamp,
     });
-  }, []);
+  }, [socket, roomId]);
 
   const notifyTyping = useCallback(() => {
-    const sock = socketRef.current;
-    const currentRoomId = useChatStore.getState().roomId;
-    if (!sock || !currentRoomId) return;
+    if (!socket || !roomId) return;
 
     if (!isTypingRef.current) {
       isTypingRef.current = true;
-      sock.emit('typing:start', { roomId: currentRoomId });
+      socket.emit('typing:start', { roomId });
     }
 
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     typingTimerRef.current = setTimeout(() => {
       if (isTypingRef.current) {
         isTypingRef.current = false;
-        sock.emit('typing:stop', { roomId: currentRoomId });
+        socket.emit('typing:stop', { roomId });
       }
     }, 2000);
-  }, []);
+  }, [socket, roomId]);
 
   const nextChat = useCallback(() => {
-    const sock = socketRef.current;
-    if (!sock) return;
-    webrtcRef.current.cleanup();
-    sock.emit('chat:next');
+    if (!socket) return;
+    webrtc.cleanup();
+
+    if (roomId) {
+      socket.emit('chat:next');
+    }
+
     reset();
-    useChatStore.getState().setUserStatus('waiting');
-    sock.emit('queue:join', { interests: useChatStore.getState().interests });
-  }, [reset]);
+    setUserStatus('waiting');
+    socket.emit('queue:join', { interests });
+  }, [socket, roomId, webrtc, reset, setUserStatus, interests]);
 
   const disconnect = useCallback(() => {
-    const sock = socketRef.current;
-    if (!sock) return;
-    webrtcRef.current.cleanup();
+    if (!socket) return;
+    webrtc.cleanup();
 
-    const currentRoomId = useChatStore.getState().roomId;
-    if (currentRoomId) {
-      sock.emit('chat:disconnect', { roomId: currentRoomId });
+    if (roomId) {
+      socket.emit('chat:disconnect', { roomId });
     } else {
-      sock.emit('queue:leave');
+      socket.emit('queue:leave');
     }
 
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     reset();
-    useChatStore.getState().setUserStatus('idle');
-  }, [reset]);
+    setUserStatus('idle');
+  }, [socket, roomId, webrtc, reset, setUserStatus]);
 
   return {
-    socket: socketRef.current,
+    socket,
     webrtc,
     userStatus,
     roomId,
